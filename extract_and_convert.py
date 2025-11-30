@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()  # loads .env → os.environ
 
 BASE_URL = "https://archive.org/download/jesus-og-josefine/Jesus%20Og%20Josefine%202003/S01/E{ep:02d}.mkv"
-START_EPISODE = 2
+START_EPISODE = 5
 END_EPISODE = 24
 OUT_DIR = "episodes"
 TRANSLATOR_DIR = "/Users/simonpacis/Downloads/srt-llm-translator"
@@ -16,9 +16,16 @@ os.makedirs(OUT_DIR, exist_ok=True)
 def download_file(url, dest_path):
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
+        total = int(r.headers.get('content-length', 0))
+        downloaded = 0
         with open(dest_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
                 f.write(chunk)
+                downloaded += len(chunk)
+                if total:
+                    percent = downloaded / total * 100
+                    print(f"\rDownloading... {percent:.1f}%", end="")
+    print("\nDownload complete.")
 
 for ep in range(START_EPISODE, END_EPISODE + 1):
     ep_name = f"E{ep:02d}"
@@ -27,7 +34,7 @@ for ep in range(START_EPISODE, END_EPISODE + 1):
 
     print(f"\n=== Episode {ep_name} ===")
 
-# 1) Download MKV
+    # 1) Download MKV
     url = BASE_URL.format(ep=ep)
     if not os.path.exists(mkv_path):
         print("Downloading:", url)
@@ -35,7 +42,7 @@ for ep in range(START_EPISODE, END_EPISODE + 1):
     else:
         print("MKV exists, skipping download")
 
-# 2) Extract VobSub
+    # 2) Extract VobSub
     sub_path = os.path.join(OUT_DIR, f"{ep_name}.sub")
     idx_path = os.path.join(OUT_DIR, f"{ep_name}.idx")
     if not (os.path.exists(sub_path) and os.path.exists(idx_path)):
@@ -44,6 +51,9 @@ for ep in range(START_EPISODE, END_EPISODE + 1):
             ["mkvextract", "tracks", mkv_path, f"2:{sub_path}"],
             check=True
         )
+        # Delete MKV after extracting subtitles
+        print("Deleting MKV to save space...")
+        os.remove(mkv_path)
     else:
         print("SUB/IDX exist, skipping extraction")
 
@@ -69,6 +79,7 @@ for ep in range(START_EPISODE, END_EPISODE + 1):
             "srt_llm_translator.py",
             "--source-lang", "da",
             "--target-lang", "en",
+            "--debug",
             "--file", movie_srt_path
         ],
         cwd=TRANSLATOR_DIR,
